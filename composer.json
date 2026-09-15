@@ -116,10 +116,12 @@
     },
   "repositories": [{
       "type": "vcs",
-      "url": "https://github.com/volmarg/notifier-proxy-logger-bridge"
+      "url": "https://github.com/volmarg/notifier-proxy-logger-bridge",
+      "no-api": true
     },{
       "type": "vcs",
-      "url": "https://github.com/Volmarg/personal-management-system-io-bridge"
+      "url": "https://github.com/Volmarg/personal-management-system-io-bridge",
+      "no-api": true
     }
   ]
 }

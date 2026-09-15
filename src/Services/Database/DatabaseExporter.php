@@ -261,7 +261,7 @@ class DatabaseExporter {
         }
 
         // this is safety check, if folder didnt existed and still does not exist then it's undesired state
-        if( !$dirExists ){
+        if( !file_exists($targetDirectory) ){
             $this->setExportMessage(self::EXPORT_MESSAGE_COULD_NOT_CREATE_FOLDER);
             $this->setIsExportedSuccessfully(false);
         }
@@ -291,18 +291,22 @@ class DatabaseExporter {
         $dumpFullPath = $dumpLocation . DIRECTORY_SEPARATOR . $prefix . $dumpFilename . $dumpExtension;
         $this->setDumpFullPath($dumpFullPath);
 
-        $command = "mysqldump -u " . $login;
+        $command = "mysqldump";
+        $command .= " -u " . escapeshellarg($login);
 
         if( !empty($password) ){
-            $command .= ' -p' . $password;
+            $command .= ' -p' . escapeshellarg($password);
         }
 
         $portPattern = "";
         if( !empty($port) ){
-            $portPattern = "--port={$port}";
+            $portPattern = "--port=" . escapeshellarg($port);
         }
 
-        $command .= " -h {$host} {$portPattern} {$name} > {$dumpFullPath}";
+        $command .= " -h " . escapeshellarg($host);
+        $command .= " {$portPattern}";
+        $command .= " " . escapeshellarg($name);
+        $command .= " --result-file=" . escapeshellarg($dumpFullPath);
 
         return $command;
     }
