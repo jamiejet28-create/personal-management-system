@@ -74,6 +74,11 @@
 
 Check the official documentation: [here](https://volmarg.github.io/docs/getting-started/installation.html)
 
+<h2>Automation</h2>
+
+- Build health workflow validates `composer.json` and runs PHP syntax checks for every push and pull request.
+- Dependabot is configured to check Composer and GitHub Actions dependencies weekly.
+
 <h2>Future development plans</h2>
 
 <h3>Improvements</h3>
