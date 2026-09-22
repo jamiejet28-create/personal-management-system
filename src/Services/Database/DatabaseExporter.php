@@ -315,7 +315,7 @@ class DatabaseExporter {
         if( !empty($databasePassword) ){
             $defaultsFilePath   = $this->createMysqlDefaultsFile($databasePassword);
             $defaultsFileOption = ' --defaults-extra-file=' . escapeshellarg($defaultsFilePath);
-            $databaseDumpCommand = preg_replace('/^mysqldump/', 'mysqldump' . $defaultsFileOption, $databaseDumpCommand, 1);
+            $databaseDumpCommand = 'mysqldump' . $defaultsFileOption . substr($databaseDumpCommand, strlen('mysqldump'));
         }
 
         try {
@@ -325,7 +325,7 @@ class DatabaseExporter {
                 unlink($defaultsFilePath);
             }
 
-            if( !empty($defaultsFilePath) ){
+            if( !empty($defaultsFilePath) && !file_exists($defaultsFilePath) ){
                 rmdir(dirname($defaultsFilePath));
             }
         }
@@ -343,7 +343,7 @@ class DatabaseExporter {
     {
         $defaultsDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pms-db-export-' . bin2hex(random_bytes(8));
 
-        if( !is_dir($defaultsDirectory) && !mkdir($defaultsDirectory, 0700) ){
+        if( !is_dir($defaultsDirectory) && !mkdir($defaultsDirectory, 0700, true) && !is_dir($defaultsDirectory) ){
             throw new \RuntimeException('Could not create temporary MySQL defaults directory.');
         }
 
