@@ -227,11 +227,16 @@ class DatabaseExporter {
         try{
             $dto = EnvReader::getDatabaseCredentials();
             $this->prepareBackupDirectory();
+            $defaultsFilePath = $this->createMysqlDefaultsFile($dto);
 
-            $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto);
+            try {
+                $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto, $defaultsFilePath);
 
-            $this->performDumpCommand($databaseDumpCommand);
-            $this->checkDump();
+                $this->performDumpCommand($databaseDumpCommand);
+                $this->checkDump();
+            } finally {
+                $this->cleanupMysqlDefaultsFile($defaultsFilePath);
+            }
         }catch(\Exception $e){
             $this->logger->critical($e->getMessage());
             $this->logger->critical(self::EXPORT_ERROR,[
@@ -261,7 +266,7 @@ class DatabaseExporter {
         }
 
         // this is safety check, if folder didnt existed and still does not exist then it's undesired state
-        if( !$dirExists ){
+        if( !is_dir($targetDirectory) ){
             $this->setExportMessage(self::EXPORT_MESSAGE_COULD_NOT_CREATE_FOLDER);
             $this->setIsExportedSuccessfully(false);
         }
@@ -273,14 +278,11 @@ class DatabaseExporter {
      * Will build shell based mysql dump command depending on provided data
      * while for example password can be empty (this is allowed) and if so the params must be different
      * @param DatabaseCredentialsDTO $dto
+     * @param string                 $defaultsFilePath
      * @return string
      */
-    private function buildShellMysqlDumpCommand(DatabaseCredentialsDTO $dto): string{
+    private function buildShellMysqlDumpCommand(DatabaseCredentialsDTO $dto, string $defaultsFilePath = ''): string{
 
-        $login      = $dto->getDatabaseLogin();
-        $password   = $dto->getDatabasePassword();
-        $host       = $dto->getDatabaseHost();
-        $port       = $dto->getDatabasePort();
         $name       = $dto->getDatabaseName();
 
         $dumpExtension  = $this->getDumpExtension();
@@ -291,18 +293,14 @@ class DatabaseExporter {
         $dumpFullPath = $dumpLocation . DIRECTORY_SEPARATOR . $prefix . $dumpFilename . $dumpExtension;
         $this->setDumpFullPath($dumpFullPath);
 
-        $command = "mysqldump -u " . $login;
+        $command = "mysqldump";
 
-        if( !empty($password) ){
-            $command .= ' -p' . $password;
+        if( !empty($defaultsFilePath) ){
+            $command .= " --defaults-extra-file=" . escapeshellarg($defaultsFilePath);
         }
 
-        $portPattern = "";
-        if( !empty($port) ){
-            $portPattern = "--port={$port}";
-        }
-
-        $command .= " -h {$host} {$portPattern} {$name} > {$dumpFullPath}";
+        $command .= " " . escapeshellarg($name);
+        $command .= " --result-file=" . escapeshellarg($dumpFullPath);
 
         return $command;
     }
@@ -310,9 +308,11 @@ class DatabaseExporter {
     /**
      * This function will execute dump command
      * @param string $databaseDumpCommand
+     * @param string $defaultsFilePath
      */
     private function performDumpCommand(string $databaseDumpCommand): void {
         $execResult = exec($databaseDumpCommand, $output, $exitCode);
+
         if (0 !== $exitCode) {
             $this->logger->critical("DB export failed", [
                 'output'     => $output,
@@ -320,6 +320,83 @@ class DatabaseExporter {
                 'execResult' => $execResult,
             ]);
         }
+    }
+
+    /**
+     * Creates a short-lived MySQL option file in a private temp directory.
+     * The password value is escaped for MySQL option-file parsing before writing.
+     */
+    private function createMysqlDefaultsFile(DatabaseCredentialsDTO $dto): string
+    {
+        $defaultsDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pms-db-export-' . bin2hex(random_bytes(8));
+
+        if( !is_dir($defaultsDirectory) && !mkdir($defaultsDirectory, 0700, true) && !is_dir($defaultsDirectory) ){
+            throw new \RuntimeException('Could not create temporary MySQL defaults directory.');
+        }
+
+        $formattedLogin    = $this->formatMysqlOptionFileValue($dto->getDatabaseLogin());
+        $formattedPassword = $this->formatMysqlOptionFileValue($dto->getDatabasePassword());
+        $formattedHost     = $this->formatMysqlOptionFileValue($dto->getDatabaseHost());
+        $defaultsContent   = "[client]\nuser={$formattedLogin}\npassword={$formattedPassword}\nhost={$formattedHost}\n";
+
+        if( !empty($dto->getDatabasePort()) ){
+            $defaultsContent .= "port=" . (int) $dto->getDatabasePort() . "\n";
+        }
+        $defaultsFilePath = $defaultsDirectory . DIRECTORY_SEPARATOR . 'mysql.cnf';
+        $oldUmask = umask(0077);
+
+        try {
+            if( false === file_put_contents($defaultsFilePath, $defaultsContent) ){
+                throw new \RuntimeException('Could not write temporary MySQL defaults file.');
+            }
+        } catch (\Throwable $throwable) {
+            if( file_exists($defaultsFilePath) ){
+                unlink($defaultsFilePath);
+            }
+            rmdir($defaultsDirectory);
+            throw $throwable;
+        } finally {
+            umask($oldUmask);
+        }
+
+        return $defaultsFilePath;
+    }
+
+    private function cleanupMysqlDefaultsFile(string $defaultsFilePath): void
+    {
+        if( empty($defaultsFilePath) ){
+            return;
+        }
+
+        $defaultsFileDeleted = !file_exists($defaultsFilePath) || unlink($defaultsFilePath);
+        if( !$defaultsFileDeleted ){
+            $this->logger->warning('Could not remove temporary MySQL defaults file.', [
+                'path' => $defaultsFilePath,
+            ]);
+            return;
+        }
+
+        $defaultsDirectory = dirname($defaultsFilePath);
+        if( !rmdir($defaultsDirectory) && is_dir($defaultsDirectory) ){
+            $this->logger->warning('Could not remove temporary MySQL defaults directory.', [
+                'path' => $defaultsDirectory,
+            ]);
+        }
+    }
+
+    /**
+     * Formats a value for safe use in a generated MySQL option file entry.
+     */
+    private function formatMysqlOptionFileValue(string $value): string
+    {
+        $escapedValue = strtr($value, [
+            "\\" => "\\\\",
+            "\n" => "\\n",
+            "\r" => "\\r",
+            "\"" => "\\\"",
+        ]);
+
+        return '"' . $escapedValue . '"';
     }
 
     /**
