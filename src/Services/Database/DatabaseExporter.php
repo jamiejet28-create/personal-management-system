@@ -323,6 +323,7 @@ class DatabaseExporter {
         } finally {
             if( !empty($defaultsFilePath) && file_exists($defaultsFilePath) ){
                 unlink($defaultsFilePath);
+                rmdir(dirname($defaultsFilePath));
             }
         }
 
@@ -337,20 +338,29 @@ class DatabaseExporter {
 
     private function createMysqlDefaultsFile(string $databasePassword): string
     {
-        $defaultsFilePath = tempnam(sys_get_temp_dir(), 'pms-db-export-');
+        $defaultsDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pms-db-export-' . bin2hex(random_bytes(8));
 
-        if( false === $defaultsFilePath ){
-            throw new \RuntimeException('Could not create temporary MySQL defaults file.');
+        if( !mkdir($defaultsDirectory, 0700) ){
+            throw new \RuntimeException('Could not create temporary MySQL defaults directory.');
         }
 
         $escapedPassword = addcslashes($databasePassword, "\\\"\n\r");
         $defaultsContent = "[client]\npassword=\"{$escapedPassword}\"\n";
+        $defaultsFilePath = $defaultsDirectory . DIRECTORY_SEPARATOR . 'mysql.cnf';
+        $oldUmask = umask(0077);
 
-        chmod($defaultsFilePath, 0600);
-
-        if( false === file_put_contents($defaultsFilePath, $defaultsContent) ){
-            unlink($defaultsFilePath);
-            throw new \RuntimeException('Could not write temporary MySQL defaults file.');
+        try {
+            if( false === file_put_contents($defaultsFilePath, $defaultsContent) ){
+                throw new \RuntimeException('Could not write temporary MySQL defaults file.');
+            }
+        } catch (\Throwable $throwable) {
+            if( file_exists($defaultsFilePath) ){
+                unlink($defaultsFilePath);
+            }
+            rmdir($defaultsDirectory);
+            throw $throwable;
+        } finally {
+            umask($oldUmask);
         }
 
         return $defaultsFilePath;
