@@ -330,10 +330,15 @@ class DatabaseExporter {
                 $defaultsFileDeleted = unlink($defaultsFilePath);
             }
 
-            if( !empty($defaultsFilePath) && !rmdir(dirname($defaultsFilePath)) && is_dir(dirname($defaultsFilePath)) ){
+            if( !empty($defaultsFilePath) && !$defaultsFileDeleted ){
+                $this->logger->warning('Could not remove temporary MySQL defaults file.', [
+                    'path' => $defaultsFilePath,
+                ]);
+            }
+
+            if( !empty($defaultsFilePath) && $defaultsFileDeleted && !rmdir(dirname($defaultsFilePath)) && is_dir(dirname($defaultsFilePath)) ){
                 $this->logger->warning('Could not remove temporary MySQL defaults directory.', [
                     'path' => dirname($defaultsFilePath),
-                    'defaultsFileDeleted' => $defaultsFileDeleted,
                 ]);
             }
         }
@@ -347,6 +352,10 @@ class DatabaseExporter {
         }
     }
 
+    /**
+     * Creates a short-lived MySQL option file in a private temp directory.
+     * The password value is escaped for MySQL option-file parsing before writing.
+     */
     private function createMysqlDefaultsFile(string $databasePassword): string
     {
         $defaultsDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pms-db-export-' . bin2hex(random_bytes(8));
@@ -377,6 +386,9 @@ class DatabaseExporter {
         return $defaultsFilePath;
     }
 
+    /**
+     * Formats a value for safe use in a generated MySQL option file entry.
+     */
     private function formatMysqlOptionFileValue(string $value): string
     {
         $escapedValue = strtr($value, [
