@@ -261,7 +261,7 @@ class DatabaseExporter {
         }
 
         // this is safety check, if folder didnt existed and still does not exist then it's undesired state
-        if( !file_exists($targetDirectory) ){
+        if( !is_dir($targetDirectory) ){
             $this->setExportMessage(self::EXPORT_MESSAGE_COULD_NOT_CREATE_FOLDER);
             $this->setIsExportedSuccessfully(false);
         }
@@ -298,13 +298,11 @@ class DatabaseExporter {
             $command .= " --password=" . escapeshellarg($password);
         }
 
-        $portPattern = "";
         if( !empty($port) ){
-            $portPattern = "--port=" . escapeshellarg($port);
+            $command .= " --port " . escapeshellarg($port);
         }
 
         $command .= " -h " . escapeshellarg($host);
-        $command .= " {$portPattern}";
         $command .= " " . escapeshellarg($name);
         $command .= " --result-file=" . escapeshellarg($dumpFullPath);
 
