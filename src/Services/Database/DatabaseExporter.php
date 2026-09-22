@@ -330,8 +330,11 @@ class DatabaseExporter {
                 $defaultsFileDeleted = unlink($defaultsFilePath);
             }
 
-            if( !empty($defaultsFilePath) && $defaultsFileDeleted ){
-                rmdir(dirname($defaultsFilePath));
+            if( !empty($defaultsFilePath) && !rmdir(dirname($defaultsFilePath)) && is_dir(dirname($defaultsFilePath)) ){
+                $this->logger->warning('Could not remove temporary MySQL defaults directory.', [
+                    'path' => dirname($defaultsFilePath),
+                    'defaultsFileDeleted' => $defaultsFileDeleted,
+                ]);
             }
         }
 
@@ -380,17 +383,10 @@ class DatabaseExporter {
             "\\" => "\\\\",
             "\n" => "\\n",
             "\r" => "\\r",
+            "\"" => "\\\"",
         ]);
 
-        if( !str_contains($escapedValue, '"') ){
-            return '"' . $escapedValue . '"';
-        }
-
-        if( !str_contains($escapedValue, "'") ){
-            return "'" . $escapedValue . "'";
-        }
-
-        return $escapedValue;
+        return '"' . $escapedValue . '"';
     }
 
     /**
