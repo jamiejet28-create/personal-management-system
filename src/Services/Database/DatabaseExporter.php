@@ -230,7 +230,7 @@ class DatabaseExporter {
 
             $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto);
 
-            $this->performDumpCommand($databaseDumpCommand);
+            $this->performDumpCommand($databaseDumpCommand, $dto->getDatabasePassword());
             $this->checkDump();
         }catch(\Exception $e){
             $this->logger->critical($e->getMessage());
@@ -278,7 +278,6 @@ class DatabaseExporter {
     private function buildShellMysqlDumpCommand(DatabaseCredentialsDTO $dto): string{
 
         $login      = $dto->getDatabaseLogin();
-        $password   = $dto->getDatabasePassword();
         $host       = $dto->getDatabaseHost();
         $port       = $dto->getDatabasePort();
         $name       = $dto->getDatabaseName();
@@ -294,10 +293,6 @@ class DatabaseExporter {
         $command = "mysqldump";
         $command .= " -u " . escapeshellarg($login);
 
-        if( !empty($password) ){
-            $command .= " --password=" . escapeshellarg($password);
-        }
-
         if( !empty($port) ){
             $command .= " --port " . escapeshellarg($port);
         }
@@ -312,9 +307,21 @@ class DatabaseExporter {
     /**
      * This function will execute dump command
      * @param string $databaseDumpCommand
+     * @param string $databasePassword
      */
-    private function performDumpCommand(string $databaseDumpCommand): void {
-        $execResult = exec($databaseDumpCommand, $output, $exitCode);
+    private function performDumpCommand(string $databaseDumpCommand, string $databasePassword = ''): void {
+        if( !empty($databasePassword) ){
+            putenv('MYSQL_PWD=' . $databasePassword);
+        }
+
+        try {
+            $execResult = exec($databaseDumpCommand, $output, $exitCode);
+        } finally {
+            if( !empty($databasePassword) ){
+                putenv('MYSQL_PWD');
+            }
+        }
+
         if (0 !== $exitCode) {
             $this->logger->critical("DB export failed", [
                 'output'     => $output,
