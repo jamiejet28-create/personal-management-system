@@ -227,16 +227,16 @@ class DatabaseExporter {
         try{
             $dto = EnvReader::getDatabaseCredentials();
             $this->prepareBackupDirectory();
-            $defaultsFilePath = '';
+            $defaultsFilePath = $this->createMysqlDefaultsFile($dto);
 
-            if( !empty($dto->getDatabasePassword()) ){
-                $defaultsFilePath = $this->createMysqlDefaultsFile($dto);
+            try {
+                $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto, $defaultsFilePath);
+
+                $this->performDumpCommand($databaseDumpCommand);
+                $this->checkDump();
+            } finally {
+                $this->cleanupMysqlDefaultsFile($defaultsFilePath);
             }
-
-            $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto, $defaultsFilePath);
-
-            $this->performDumpCommand($databaseDumpCommand, $defaultsFilePath);
-            $this->checkDump();
         }catch(\Exception $e){
             $this->logger->critical($e->getMessage());
             $this->logger->critical(self::EXPORT_ERROR,[
@@ -310,28 +310,8 @@ class DatabaseExporter {
      * @param string $databaseDumpCommand
      * @param string $defaultsFilePath
      */
-    private function performDumpCommand(string $databaseDumpCommand, string $defaultsFilePath = ''): void {
-        $defaultsFileDeleted = empty($defaultsFilePath);
-
-        try {
-            $execResult = exec($databaseDumpCommand, $output, $exitCode);
-        } finally {
-            if( !empty($defaultsFilePath) && file_exists($defaultsFilePath) ){
-                $defaultsFileDeleted = unlink($defaultsFilePath);
-            }
-
-            if( !empty($defaultsFilePath) && !$defaultsFileDeleted ){
-                $this->logger->warning('Could not remove temporary MySQL defaults file.', [
-                    'path' => $defaultsFilePath,
-                ]);
-            }
-
-            if( !empty($defaultsFilePath) && $defaultsFileDeleted && !rmdir(dirname($defaultsFilePath)) && is_dir(dirname($defaultsFilePath)) ){
-                $this->logger->warning('Could not remove temporary MySQL defaults directory.', [
-                    'path' => dirname($defaultsFilePath),
-                ]);
-            }
-        }
+    private function performDumpCommand(string $databaseDumpCommand): void {
+        $execResult = exec($databaseDumpCommand, $output, $exitCode);
 
         if (0 !== $exitCode) {
             $this->logger->critical("DB export failed", [
@@ -360,7 +340,7 @@ class DatabaseExporter {
         $defaultsContent   = "[client]\nuser={$formattedLogin}\npassword={$formattedPassword}\nhost={$formattedHost}\n";
 
         if( !empty($dto->getDatabasePort()) ){
-            $defaultsContent .= "port=" . $this->formatMysqlOptionFileValue($dto->getDatabasePort()) . "\n";
+            $defaultsContent .= "port=" . (int) $dto->getDatabasePort() . "\n";
         }
         $defaultsFilePath = $defaultsDirectory . DIRECTORY_SEPARATOR . 'mysql.cnf';
         $oldUmask = umask(0077);
@@ -380,6 +360,28 @@ class DatabaseExporter {
         }
 
         return $defaultsFilePath;
+    }
+
+    private function cleanupMysqlDefaultsFile(string $defaultsFilePath): void
+    {
+        if( empty($defaultsFilePath) ){
+            return;
+        }
+
+        $defaultsFileDeleted = !file_exists($defaultsFilePath) || unlink($defaultsFilePath);
+        if( !$defaultsFileDeleted ){
+            $this->logger->warning('Could not remove temporary MySQL defaults file.', [
+                'path' => $defaultsFilePath,
+            ]);
+            return;
+        }
+
+        $defaultsDirectory = dirname($defaultsFilePath);
+        if( !rmdir($defaultsDirectory) && is_dir($defaultsDirectory) ){
+            $this->logger->warning('Could not remove temporary MySQL defaults directory.', [
+                'path' => $defaultsDirectory,
+            ]);
+        }
     }
 
     /**
