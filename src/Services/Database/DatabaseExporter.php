@@ -343,8 +343,15 @@ class DatabaseExporter {
             throw new \RuntimeException('Could not create temporary MySQL defaults file.');
         }
 
+        $escapedPassword = addcslashes($databasePassword, "\\\"\n\r");
+        $defaultsContent = "[client]\npassword=\"{$escapedPassword}\"\n";
+
         chmod($defaultsFilePath, 0600);
-        file_put_contents($defaultsFilePath, "[client]\npassword={$databasePassword}\n");
+
+        if( false === file_put_contents($defaultsFilePath, $defaultsContent) ){
+            unlink($defaultsFilePath);
+            throw new \RuntimeException('Could not write temporary MySQL defaults file.');
+        }
 
         return $defaultsFilePath;
     }
