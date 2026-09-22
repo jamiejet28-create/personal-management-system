@@ -76,7 +76,7 @@ Check the official documentation: [here](https://volmarg.github.io/docs/getting-
 
 <h2>Automation</h2>
 
-- Build health workflow validates `composer.json` and runs PHP syntax checks for every push and pull request.
+- Build health workflow validates `composer.json` and runs PHP syntax checks for pull requests, pushes to `main`, and manual dispatches.
 - Dependabot is configured to check Composer and GitHub Actions dependencies weekly.
 
 <h2>Future development plans</h2>
