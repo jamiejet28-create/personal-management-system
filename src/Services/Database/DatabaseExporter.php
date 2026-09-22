@@ -227,10 +227,15 @@ class DatabaseExporter {
         try{
             $dto = EnvReader::getDatabaseCredentials();
             $this->prepareBackupDirectory();
+            $defaultsFilePath = '';
 
-            $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto);
+            if( !empty($dto->getDatabasePassword()) ){
+                $defaultsFilePath = $this->createMysqlDefaultsFile($dto->getDatabasePassword());
+            }
 
-            $this->performDumpCommand($databaseDumpCommand, $dto->getDatabasePassword());
+            $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto, $defaultsFilePath);
+
+            $this->performDumpCommand($databaseDumpCommand, $defaultsFilePath);
             $this->checkDump();
         }catch(\Exception $e){
             $this->logger->critical($e->getMessage());
@@ -273,9 +278,10 @@ class DatabaseExporter {
      * Will build shell based mysql dump command depending on provided data
      * while for example password can be empty (this is allowed) and if so the params must be different
      * @param DatabaseCredentialsDTO $dto
+     * @param string                 $defaultsFilePath
      * @return string
      */
-    private function buildShellMysqlDumpCommand(DatabaseCredentialsDTO $dto): string{
+    private function buildShellMysqlDumpCommand(DatabaseCredentialsDTO $dto, string $defaultsFilePath = ''): string{
 
         $login      = $dto->getDatabaseLogin();
         $host       = $dto->getDatabaseHost();
@@ -291,6 +297,11 @@ class DatabaseExporter {
         $this->setDumpFullPath($dumpFullPath);
 
         $command = "mysqldump";
+
+        if( !empty($defaultsFilePath) ){
+            $command .= " --defaults-extra-file=" . escapeshellarg($defaultsFilePath);
+        }
+
         $command .= " -u " . escapeshellarg($login);
 
         if( !empty($port) ){
@@ -307,17 +318,9 @@ class DatabaseExporter {
     /**
      * This function will execute dump command
      * @param string $databaseDumpCommand
-     * @param string $databasePassword
+     * @param string $defaultsFilePath
      */
-    private function performDumpCommand(string $databaseDumpCommand, string $databasePassword = ''): void {
-        $defaultsFilePath = null;
-
-        if( !empty($databasePassword) ){
-            $defaultsFilePath   = $this->createMysqlDefaultsFile($databasePassword);
-            $defaultsFileOption = ' --defaults-extra-file=' . escapeshellarg($defaultsFilePath);
-            $databaseDumpCommand = 'mysqldump' . $defaultsFileOption . substr($databaseDumpCommand, strlen('mysqldump'));
-        }
-
+    private function performDumpCommand(string $databaseDumpCommand, string $defaultsFilePath = ''): void {
         try {
             $execResult = exec($databaseDumpCommand, $output, $exitCode);
         } finally {
