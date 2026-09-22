@@ -310,15 +310,19 @@ class DatabaseExporter {
      * @param string $databasePassword
      */
     private function performDumpCommand(string $databaseDumpCommand, string $databasePassword = ''): void {
+        $defaultsFilePath = null;
+
         if( !empty($databasePassword) ){
-            putenv('MYSQL_PWD=' . $databasePassword);
+            $defaultsFilePath   = $this->createMysqlDefaultsFile($databasePassword);
+            $defaultsFileOption = ' --defaults-extra-file=' . escapeshellarg($defaultsFilePath);
+            $databaseDumpCommand = preg_replace('/^mysqldump/', 'mysqldump' . $defaultsFileOption, $databaseDumpCommand, 1);
         }
 
         try {
             $execResult = exec($databaseDumpCommand, $output, $exitCode);
         } finally {
-            if( !empty($databasePassword) ){
-                putenv('MYSQL_PWD');
+            if( !empty($defaultsFilePath) && file_exists($defaultsFilePath) ){
+                unlink($defaultsFilePath);
             }
         }
 
@@ -329,6 +333,20 @@ class DatabaseExporter {
                 'execResult' => $execResult,
             ]);
         }
+    }
+
+    private function createMysqlDefaultsFile(string $databasePassword): string
+    {
+        $defaultsFilePath = tempnam(sys_get_temp_dir(), 'pms-db-export-');
+
+        if( false === $defaultsFilePath ){
+            throw new \RuntimeException('Could not create temporary MySQL defaults file.');
+        }
+
+        chmod($defaultsFilePath, 0600);
+        file_put_contents($defaultsFilePath, "[client]\npassword={$databasePassword}\n");
+
+        return $defaultsFilePath;
     }
 
     /**
