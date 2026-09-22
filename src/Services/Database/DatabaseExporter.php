@@ -321,14 +321,16 @@ class DatabaseExporter {
      * @param string $defaultsFilePath
      */
     private function performDumpCommand(string $databaseDumpCommand, string $defaultsFilePath = ''): void {
+        $defaultsFileDeleted = empty($defaultsFilePath);
+
         try {
             $execResult = exec($databaseDumpCommand, $output, $exitCode);
         } finally {
             if( !empty($defaultsFilePath) && file_exists($defaultsFilePath) ){
-                unlink($defaultsFilePath);
+                $defaultsFileDeleted = unlink($defaultsFilePath);
             }
 
-            if( !empty($defaultsFilePath) && !file_exists($defaultsFilePath) ){
+            if( !empty($defaultsFilePath) && $defaultsFileDeleted ){
                 rmdir(dirname($defaultsFilePath));
             }
         }
@@ -350,8 +352,8 @@ class DatabaseExporter {
             throw new \RuntimeException('Could not create temporary MySQL defaults directory.');
         }
 
-        $escapedPassword = addcslashes($databasePassword, "\\\"\n\r");
-        $defaultsContent = "[client]\npassword=\"{$escapedPassword}\"\n";
+        $formattedPassword = $this->formatMysqlOptionFileValue($databasePassword);
+        $defaultsContent = "[client]\npassword={$formattedPassword}\n";
         $defaultsFilePath = $defaultsDirectory . DIRECTORY_SEPARATOR . 'mysql.cnf';
         $oldUmask = umask(0077);
 
@@ -370,6 +372,25 @@ class DatabaseExporter {
         }
 
         return $defaultsFilePath;
+    }
+
+    private function formatMysqlOptionFileValue(string $value): string
+    {
+        $escapedValue = strtr($value, [
+            "\\" => "\\\\",
+            "\n" => "\\n",
+            "\r" => "\\r",
+        ]);
+
+        if( !str_contains($escapedValue, '"') ){
+            return '"' . $escapedValue . '"';
+        }
+
+        if( !str_contains($escapedValue, "'") ){
+            return "'" . $escapedValue . "'";
+        }
+
+        return $escapedValue;
     }
 
     /**
