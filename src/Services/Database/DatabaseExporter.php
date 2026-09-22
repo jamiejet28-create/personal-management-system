@@ -295,7 +295,7 @@ class DatabaseExporter {
         $command .= " -u " . escapeshellarg($login);
 
         if( !empty($password) ){
-            $command .= ' -p' . escapeshellarg($password);
+            $command .= sprintf(' -p%s', escapeshellarg($password));
         }
 
         $portPattern = "";
