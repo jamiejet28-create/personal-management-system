@@ -323,6 +323,9 @@ class DatabaseExporter {
         } finally {
             if( !empty($defaultsFilePath) && file_exists($defaultsFilePath) ){
                 unlink($defaultsFilePath);
+            }
+
+            if( !empty($defaultsFilePath) ){
                 rmdir(dirname($defaultsFilePath));
             }
         }
@@ -340,7 +343,7 @@ class DatabaseExporter {
     {
         $defaultsDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pms-db-export-' . bin2hex(random_bytes(8));
 
-        if( !mkdir($defaultsDirectory, 0700) ){
+        if( !is_dir($defaultsDirectory) && !mkdir($defaultsDirectory, 0700) ){
             throw new \RuntimeException('Could not create temporary MySQL defaults directory.');
         }
 
