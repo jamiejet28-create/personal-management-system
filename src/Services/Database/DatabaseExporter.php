@@ -230,7 +230,7 @@ class DatabaseExporter {
             $defaultsFilePath = '';
 
             if( !empty($dto->getDatabasePassword()) ){
-                $defaultsFilePath = $this->createMysqlDefaultsFile($dto->getDatabasePassword());
+                $defaultsFilePath = $this->createMysqlDefaultsFile($dto);
             }
 
             $databaseDumpCommand = $this->buildShellMysqlDumpCommand($dto, $defaultsFilePath);
@@ -283,9 +283,6 @@ class DatabaseExporter {
      */
     private function buildShellMysqlDumpCommand(DatabaseCredentialsDTO $dto, string $defaultsFilePath = ''): string{
 
-        $login      = $dto->getDatabaseLogin();
-        $host       = $dto->getDatabaseHost();
-        $port       = $dto->getDatabasePort();
         $name       = $dto->getDatabaseName();
 
         $dumpExtension  = $this->getDumpExtension();
@@ -302,13 +299,6 @@ class DatabaseExporter {
             $command .= " --defaults-extra-file=" . escapeshellarg($defaultsFilePath);
         }
 
-        $command .= " -u " . escapeshellarg($login);
-
-        if( !empty($port) ){
-            $command .= " --port " . escapeshellarg($port);
-        }
-
-        $command .= " -h " . escapeshellarg($host);
         $command .= " " . escapeshellarg($name);
         $command .= " --result-file=" . escapeshellarg($dumpFullPath);
 
@@ -356,7 +346,7 @@ class DatabaseExporter {
      * Creates a short-lived MySQL option file in a private temp directory.
      * The password value is escaped for MySQL option-file parsing before writing.
      */
-    private function createMysqlDefaultsFile(string $databasePassword): string
+    private function createMysqlDefaultsFile(DatabaseCredentialsDTO $dto): string
     {
         $defaultsDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pms-db-export-' . bin2hex(random_bytes(8));
 
@@ -364,8 +354,14 @@ class DatabaseExporter {
             throw new \RuntimeException('Could not create temporary MySQL defaults directory.');
         }
 
-        $formattedPassword = $this->formatMysqlOptionFileValue($databasePassword);
-        $defaultsContent = "[client]\npassword={$formattedPassword}\n";
+        $formattedLogin    = $this->formatMysqlOptionFileValue($dto->getDatabaseLogin());
+        $formattedPassword = $this->formatMysqlOptionFileValue($dto->getDatabasePassword());
+        $formattedHost     = $this->formatMysqlOptionFileValue($dto->getDatabaseHost());
+        $defaultsContent   = "[client]\nuser={$formattedLogin}\npassword={$formattedPassword}\nhost={$formattedHost}\n";
+
+        if( !empty($dto->getDatabasePort()) ){
+            $defaultsContent .= "port=" . $this->formatMysqlOptionFileValue($dto->getDatabasePort()) . "\n";
+        }
         $defaultsFilePath = $defaultsDirectory . DIRECTORY_SEPARATOR . 'mysql.cnf';
         $oldUmask = umask(0077);
 
